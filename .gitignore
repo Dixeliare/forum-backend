@@ -1,9 +1,30 @@
-HELP.md
+### Maven ###
 target/
+!.mvn/wrapper/maven-wrapper.properties
 .mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
 
+### Compiled files ###
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+
+### Log files ###
+*.log
+*.log.*
+
+### OS ###
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+### IDE ###
 ### STS ###
 .apt_generated
 .classpath
@@ -18,6 +39,7 @@ target/
 *.iws
 *.iml
 *.ipr
+out/
 
 ### NetBeans ###
 /nbproject/private/
@@ -26,8 +48,22 @@ target/
 /nbdist/
 /.nb-gradle/
 build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
 ### VS Code ###
 .vscode/
+
+### Application config (local) ###
+application-local.yaml
+application-local.yml
+application-local.properties
+application-dev.yaml
+application-dev.yml
+application-dev.properties
+.env
+.env.local
+.env.*.local
+
+### Other ###
+*.swp
+*.swo
+*~
