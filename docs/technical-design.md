@@ -77,6 +77,9 @@ Sử dụng chiến lược Dual-Key Identification (Định danh kép) để t�
 *   **Kiểu dữ liệu:** BIGINT (64-bit).
 *   **Lợi ích:** Tương thích hoàn hảo với B-Tree Index của PostgreSQL, không gây phân mảnh trang (Page Splitting) như UUID, sắp xếp được theo thời gian.
 
+> [!TIP]
+> Chi tiết giải pháp kỹ thuật sinh Distributed ID và Redis Auto-Discovery xem tại [tsid-generation-spec.md](file:///Users/techmax/Documents/GitHub/forum-backend/docs/tsid-generation-spec.md).
+
 **Public ID (Dùng cho Người):**
 *   **User Tag:** `LatinizedName` + `#` + `NanoID`. (Ví dụ: `LL#Xy9z` cho user "李小龙").
 *   **Cấu trúc:** Prefix (xử lý bởi ICU4J) giúp dễ đọc + Suffix (NanoID) đảm bảo duy nhất và bảo mật.
