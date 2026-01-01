@@ -100,8 +100,8 @@ CREATE TABLE sub_forums (
     description TEXT,
     display_order INTEGER DEFAULT 0,                    -- Thứ tự hiển thị (nếu dùng manual sorting)
     last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- Activity gần nhất (comment/thread mới)
-    last_thread_id BIGINT REFERENCES forum_threads(id) ON DELETE SET NULL, -- Thread có activity gần nhất (để jump đến)
-    last_comment_id BIGINT REFERENCES comments(id) ON DELETE SET NULL, -- Comment gần nhất (nếu activity là comment, để jump đến)
+    last_thread_id BIGINT,                              -- Thread có activity gần nhất (FK sẽ thêm sau)
+    last_comment_id BIGINT,                             -- Comment gần nhất (FK sẽ thêm sau)
     last_activity_by_user_id BIGINT REFERENCES users(internal_id) ON DELETE SET NULL, -- User tạo activity gần nhất (hiển thị tên)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE,
@@ -170,6 +170,30 @@ CREATE INDEX idx_communities_is_searchable ON communities(is_searchable) WHERE i
 
 COMMENT ON TABLE communities IS 'Nhóm cộng đồng. community_id NULL trong posts = Personal Post';
 
+-- =====================================================
+-- TOPICS SYSTEM (Phải tạo trước posts vì posts có FK đến topics)
+-- =====================================================
+
+CREATE TABLE topics (
+    id BIGINT PRIMARY KEY,                              -- TSID (internal_id)
+    name VARCHAR(255) NOT NULL UNIQUE,                  -- Tên topic (e.g., "Technology", "Hà Nội")
+    slug VARCHAR(255) NOT NULL UNIQUE,                 -- URL slug (e.g., "technology", "hanoi")
+    description TEXT,                                   -- Mô tả topic
+    image_url TEXT,                                      -- Ảnh đại diện topic (optional)
+    post_count INTEGER DEFAULT 0,                       -- Số posts có topic này (denormalized)
+    follower_count INTEGER DEFAULT 0,                   -- Số users follow topic này (denormalized)
+    is_featured BOOLEAN DEFAULT FALSE,                 -- Topic nổi bật (admin feature)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_topics_slug ON topics(slug);
+CREATE INDEX idx_topics_name ON topics(name);
+CREATE INDEX idx_topics_featured ON topics(is_featured) WHERE is_featured = TRUE;
+CREATE INDEX idx_topics_follower_count ON topics(follower_count DESC); -- Sort topics theo popularity
+
+COMMENT ON TABLE topics IS 'Topics system giống Threads (Meta). Users có thể follow topics để xem posts về topic đó. Mỗi post chỉ có 1 topic (one-to-many: topic → posts). Post có thể không có topic (topic_id IS NULL trong posts)';
+
 CREATE TABLE posts (
     id BIGINT PRIMARY KEY,                              -- TSID
     author_id BIGINT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
@@ -213,6 +237,28 @@ COMMENT ON TABLE posts IS 'Bài viết Social. community_id NULL = Personal Post
 -- 4. INTERACTION SYSTEM (Likes, Comments, Saves, Shares, Follows)
 -- =====================================================
 
+-- Unified Comments Table (Phải tạo trước comment_likes vì comment_likes có FK đến comments)
+CREATE TABLE comments (
+    id BIGINT PRIMARY KEY,                              -- TSID
+    post_id BIGINT REFERENCES posts(id) ON DELETE CASCADE,      -- NULL nếu là comment của thread
+    thread_id BIGINT REFERENCES forum_threads(id) ON DELETE CASCADE, -- NULL nếu là comment của post
+    author_id BIGINT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
+    parent_comment_id BIGINT REFERENCES comments(id) ON DELETE CASCADE, -- Nested comments (reply)
+    content TEXT NOT NULL,
+    likes_count INTEGER DEFAULT 0,                      -- Denormalized count (từ comment_likes)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE
+    -- Note: Business logic (comment phải có post hoặc thread) được xử lý ở Backend
+);
+
+CREATE INDEX idx_comments_post ON comments(post_id) WHERE post_id IS NOT NULL;
+CREATE INDEX idx_comments_thread ON comments(thread_id) WHERE thread_id IS NOT NULL;
+CREATE INDEX idx_comments_author ON comments(author_id);
+CREATE INDEX idx_comments_parent ON comments(parent_comment_id) WHERE parent_comment_id IS NOT NULL;
+CREATE INDEX idx_comments_created ON comments(created_at DESC);
+
+COMMENT ON TABLE comments IS 'Unified Comments cho Posts (Personal + Community) và Forum Threads. Dùng chung vì cấu trúc giống nhau';
+
 -- Separate Likes Tables (Best Practice: Tách riêng để có FK constraint và optimize tốt hơn)
 CREATE TABLE post_likes (
     user_id BIGINT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
@@ -250,27 +296,14 @@ CREATE INDEX idx_thread_likes_created ON thread_likes(created_at DESC);  -- Sort
 
 COMMENT ON TABLE thread_likes IS 'Likes cho Forum Threads. Composite PK (user_id, thread_id) - Junction table pattern';
 
--- Unified Comments Table (Best Practice: Dùng chung cho Posts và Threads)
-CREATE TABLE comments (
-    id BIGINT PRIMARY KEY,                              -- TSID
-    post_id BIGINT REFERENCES posts(id) ON DELETE CASCADE,      -- NULL nếu là comment của thread
-    thread_id BIGINT REFERENCES forum_threads(id) ON DELETE CASCADE, -- NULL nếu là comment của post
-    author_id BIGINT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
-    parent_comment_id BIGINT REFERENCES comments(id) ON DELETE CASCADE, -- Nested comments (reply)
-    content TEXT NOT NULL,
-    likes_count INTEGER DEFAULT 0,                      -- Denormalized count (từ comment_likes)
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE
-    -- Note: Business logic (comment phải có post hoặc thread) được xử lý ở Backend
-);
+-- Add foreign key constraints to sub_forums after forum_threads and comments are created
+ALTER TABLE sub_forums 
+    ADD CONSTRAINT fk_sub_forums_last_thread 
+    FOREIGN KEY (last_thread_id) REFERENCES forum_threads(id) ON DELETE SET NULL;
 
-CREATE INDEX idx_comments_post ON comments(post_id) WHERE post_id IS NOT NULL;
-CREATE INDEX idx_comments_thread ON comments(thread_id) WHERE thread_id IS NOT NULL;
-CREATE INDEX idx_comments_author ON comments(author_id);
-CREATE INDEX idx_comments_parent ON comments(parent_comment_id) WHERE parent_comment_id IS NOT NULL;
-CREATE INDEX idx_comments_created ON comments(created_at DESC);
-
-COMMENT ON TABLE comments IS 'Unified Comments cho Posts (Personal + Community) và Forum Threads. Dùng chung vì cấu trúc giống nhau';
+ALTER TABLE sub_forums 
+    ADD CONSTRAINT fk_sub_forums_last_comment 
+    FOREIGN KEY (last_comment_id) REFERENCES comments(id) ON DELETE SET NULL;
 
 CREATE TABLE saved_posts (
     user_id BIGINT NOT NULL REFERENCES users(internal_id) ON DELETE CASCADE,
@@ -331,10 +364,9 @@ CREATE TABLE join_requests (
     reviewed_by BIGINT REFERENCES users(internal_id) ON DELETE SET NULL, -- Người duyệt (admin/moderator)
     reviewed_at TIMESTAMP WITH TIME ZONE,               -- Thời gian duyệt
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_join_request_user_forum UNIQUE(user_id, forum_id) WHERE forum_id IS NOT NULL,
-    CONSTRAINT uq_join_request_user_community UNIQUE(user_id, community_id) WHERE community_id IS NOT NULL
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     -- Note: Business logic (join request phải có forum hoặc community) được xử lý ở Backend
+    -- Note: Unique constraints được tạo bằng partial unique index bên dưới
 );
 
 CREATE INDEX idx_join_requests_user ON join_requests(user_id);
@@ -345,32 +377,11 @@ CREATE INDEX idx_join_requests_forum_status ON join_requests(forum_id, status) W
 CREATE INDEX idx_join_requests_community_status ON join_requests(community_id, status) WHERE community_id IS NOT NULL;
 CREATE INDEX idx_join_requests_created ON join_requests(created_at DESC);
 
+-- Partial unique indexes (thay thế UNIQUE constraint với WHERE clause)
+CREATE UNIQUE INDEX uq_join_request_user_forum ON join_requests(user_id, forum_id) WHERE forum_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_join_request_user_community ON join_requests(user_id, community_id) WHERE community_id IS NOT NULL;
+
 COMMENT ON TABLE join_requests IS 'Yêu cầu tham gia Forum hoặc Community. Status: PENDING, APPROVED, REJECTED';
-
-
--- =====================================================
--- 5. TOPICS SYSTEM (Giống Threads - Meta)
--- =====================================================
-
-CREATE TABLE topics (
-    id BIGINT PRIMARY KEY,                              -- TSID (internal_id)
-    name VARCHAR(255) NOT NULL UNIQUE,                  -- Tên topic (e.g., "Technology", "Hà Nội")
-    slug VARCHAR(255) NOT NULL UNIQUE,                 -- URL slug (e.g., "technology", "hanoi")
-    description TEXT,                                   -- Mô tả topic
-    image_url TEXT,                                      -- Ảnh đại diện topic (optional)
-    post_count INTEGER DEFAULT 0,                       -- Số posts có topic này (denormalized)
-    follower_count INTEGER DEFAULT 0,                   -- Số users follow topic này (denormalized)
-    is_featured BOOLEAN DEFAULT FALSE,                 -- Topic nổi bật (admin feature)
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE
-);
-
-CREATE INDEX idx_topics_slug ON topics(slug);
-CREATE INDEX idx_topics_name ON topics(name);
-CREATE INDEX idx_topics_featured ON topics(is_featured) WHERE is_featured = TRUE;
-CREATE INDEX idx_topics_follower_count ON topics(follower_count DESC); -- Sort topics theo popularity
-
-COMMENT ON TABLE topics IS 'Topics system giống Threads (Meta). Users có thể follow topics để xem posts về topic đó. Mỗi post chỉ có 1 topic (one-to-many: topic → posts). Post có thể không có topic (topic_id IS NULL trong posts)';
 
 -- User Topic Follows: Users follow topics để xem posts về topic đó trong feed
 CREATE TABLE user_topic_follows (
