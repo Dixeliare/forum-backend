@@ -57,8 +57,8 @@ CREATE TABLE forums (
     public_id VARCHAR(10) NOT NULL UNIQUE,              -- Short ID cho URL (slug.public_id) - Dùng để query DB
     description TEXT,
     owner_id BIGINT NOT NULL REFERENCES users(internal_id) ON DELETE RESTRICT, -- Admin tạo forum
-    is_public BOOLEAN DEFAULT TRUE,                     -- Public hoặc Private forum (is_discoverable)
     is_private BOOLEAN DEFAULT FALSE,                   -- Private forum
+    is_searchable BOOLEAN DEFAULT TRUE,                  -- Có thể search (discoverable)
     is_nsfw BOOLEAN DEFAULT FALSE,                      -- NSFW flag
     member_count INTEGER DEFAULT 0,                      -- Số thành viên
     thread_count INTEGER DEFAULT 0,                       -- Số threads (denormalized)
@@ -70,7 +70,7 @@ CREATE TABLE forums (
 CREATE INDEX idx_forums_slug ON forums(slug);
 CREATE INDEX idx_forums_public_id ON forums(public_id);
 CREATE INDEX idx_forums_owner ON forums(owner_id);
-CREATE INDEX idx_forums_is_public ON forums(is_public);
+CREATE INDEX idx_forums_is_searchable ON forums(is_searchable) WHERE is_searchable = TRUE;
 
 COMMENT ON TABLE forums IS 'Lớp Forum ngoài cùng - Cho phép nhiều forum độc lập (Voz, SpringBoot VN, etc.) trong cùng 1 app';
 

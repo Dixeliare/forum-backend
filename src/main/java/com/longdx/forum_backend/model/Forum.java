@@ -45,11 +45,11 @@ public class Forum {
     @NotNull
     private User owner; // Admin tạo forum
 
-    @Column(name = "is_public", nullable = false)
-    private Boolean isPublic = true; // Public hoặc Private forum
-
     @Column(name = "is_private", nullable = false)
     private Boolean isPrivate = false; // Private forum
+
+    @Column(name = "is_searchable", nullable = false)
+    private Boolean isSearchable = true; // Có thể search (discoverable)
 
     @Column(name = "is_nsfw", nullable = false)
     private Boolean isNsfw = false; // NSFW flag
